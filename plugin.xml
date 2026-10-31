@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plugin xmlns="http://apache.org/cordova/ns/plugins/1.0"
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    id="cordova-plugin-native-logger"
+    version="0.1.0">
+    <name>Native Logger</name>
+    <description>Captures app-native logs for tester diagnostics on Android and iOS.</description>
+    <license>UNLICENSED</license>
+    <keywords>cordova,native,logger,logcat,oslog</keywords>
+
+    <js-module src="www/native-logger.js" name="NativeLogger">
+        <clobbers target="cordova.plugins.nativeLogger" />
+    </js-module>
+
+    <platform name="android">
+        <config-file target="res/xml/config.xml" parent="/*">
+            <feature name="NativeLogger">
+                <param name="android-package" value="uk.co.workingedge.nativelogger.NativeLoggerPlugin" />
+            </feature>
+        </config-file>
+        <source-file src="src/android/uk/co/workingedge/nativelogger/NativeLoggerPlugin.java"
+            target-dir="src/uk/co/workingedge/nativelogger" />
+        <source-file src="src/android/uk/co/workingedge/nativelogger/LogLine.java"
+            target-dir="src/uk/co/workingedge/nativelogger" />
+        <source-file src="src/android/uk/co/workingedge/nativelogger/LogFile.java"
+            target-dir="src/uk/co/workingedge/nativelogger" />
+        <source-file src="src/android/uk/co/workingedge/nativelogger/SessionTracker.java"
+            target-dir="src/uk/co/workingedge/nativelogger" />
+        <source-file src="src/android/uk/co/workingedge/nativelogger/NativeLogcatReader.java"
+            target-dir="src/uk/co/workingedge/nativelogger" />
+        <source-file src="src/android/uk/co/workingedge/nativelogger/DeviceDiagnostics.java"
+            target-dir="src/uk/co/workingedge/nativelogger" />
+    </platform>
+
+    <platform name="ios">
+        <config-file target="config.xml" parent="/*">
+            <feature name="NativeLogger">
+                <param name="ios-package" value="NativeLoggerPlugin" />
+            </feature>
+        </config-file>
+        <source-file src="src/ios/NativeLoggerPlugin.swift" />
+        <source-file src="src/ios/LogLine.swift" />
+        <source-file src="src/ios/LogFile.swift" />
+        <source-file src="src/ios/SessionTracker.swift" />
+        <source-file src="src/ios/DeviceDiagnostics.swift" />
+        <source-file src="src/ios/StdioCapture.swift" />
+        <framework src="MetricKit.framework" />
+        <framework src="UserNotifications.framework" />
+        <framework src="AVFoundation.framework" />
+    </platform>
+</plugin>

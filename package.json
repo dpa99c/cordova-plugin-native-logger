@@ -1,0 +1,36 @@
+{
+  "name": "cordova-plugin-native-logger",
+  "version": "0.1.0",
+  "description": "Cordova plugin for capturing app-native logs on Android and iOS.",
+  "main": "www/native-logger.js",
+  "types": "types/index.d.ts",
+  "files": [
+    "plugin.xml",
+    "src/",
+    "types/",
+    "www/",
+    "README.md",
+    "tests/"
+  ],
+  "keywords": [
+    "cordova",
+    "native",
+    "logger",
+    "logcat",
+    "oslog"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "cordova": {
+    "id": "cordova-plugin-native-logger",
+    "platforms": [
+      "android",
+      "ios"
+    ]
+  },
+  "engines": {
+    "cordova": ">=11.0.0"
+  },
+  "license": "UNLICENSED"
+}
