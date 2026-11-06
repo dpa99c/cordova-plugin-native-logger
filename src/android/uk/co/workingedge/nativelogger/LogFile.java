@@ -95,6 +95,64 @@ final class LogFile {
         }
     }
 
+    synchronized void reset() throws IOException {
+        close();
+        IOException failure = null;
+        try {
+            if (previousFile.exists() && !previousFile.delete()) {
+                throw new IOException("Unable to remove previous native log");
+            }
+            try (FileOutputStream ignored = new FileOutputStream(currentFile, false)) {
+                // Truncate the current native log before reopening its writer.
+            }
+        } catch (IOException exception) {
+            failure = exception;
+        }
+        try {
+            openWriter();
+        } catch (IOException exception) {
+            if (failure == null) {
+                failure = exception;
+            } else {
+                failure.addSuppressed(exception);
+            }
+        }
+        if (failure != null) {
+            throw failure;
+        }
+    }
+
+    synchronized void prune(long maxAgeMs) throws IOException {
+        if (maxAgeMs < 0) {
+            throw new IOException("Maximum log message age must be a non-negative duration");
+        }
+        boolean reopenWriter = writer != null;
+        if (reopenWriter) {
+            close();
+        }
+
+        IOException failure = null;
+        try {
+            pruneOlderThan(maxAgeMs);
+        } catch (IOException exception) {
+            failure = exception;
+        }
+        if (reopenWriter) {
+            try {
+                openWriter();
+            } catch (IOException exception) {
+                if (failure == null) {
+                    failure = exception;
+                } else {
+                    failure.addSuppressed(exception);
+                }
+            }
+        }
+        if (failure != null) {
+            throw failure;
+        }
+    }
+
     synchronized String exportTo(File cacheDirectory) throws IOException {
         flush();
         if (!cacheDirectory.exists() && !cacheDirectory.mkdirs()) {
@@ -114,8 +172,8 @@ final class LogFile {
     }
 
     private void pruneOlderThan(long maxAgeMs) throws IOException {
-        if (maxAgeMs <= 0) {
-            return;
+        if (maxAgeMs < 0) {
+            throw new IOException("Maximum log message age must be a non-negative duration");
         }
         long cutoff = System.currentTimeMillis() - maxAgeMs;
         pruneFile(currentFile, cutoff);

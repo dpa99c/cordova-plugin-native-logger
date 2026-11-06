@@ -62,6 +62,8 @@ export interface NativeLoggerPlugin {
   ): Promise<NativeLoggerCapabilities>;
   stop(): Promise<void>;
   flush(): Promise<void>;
+  resetLogFile(): Promise<void>;
+  pruneLogFile(maxAgeMs: number): Promise<void>;
   getExitReasons(sinceMs?: number): Promise<NativeExitReason[]>;
   getDiagnostics(): Promise<Record<string, unknown>>;
   exportLog(): Promise<string>;

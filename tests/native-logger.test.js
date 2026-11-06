@@ -99,6 +99,27 @@ test('one-shot actions preserve names, arguments, and native errors', async func
   });
 });
 
+test('reset and prune actions forward the native log maintenance requests', async function () {
+  const calls = [];
+  const api = loadModule(function (success, failure, service, action, args) {
+    calls.push({ success: success, failure: failure, service: service, action: action, args: args });
+  });
+
+  const reset = api.resetLogFile();
+  const prune = api.pruneLogFile(172800000);
+
+  assert.equal(calls[0].service, 'NativeLogger');
+  assert.equal(calls[0].action, 'resetLogFile');
+  assert.deepEqual(Array.from(calls[0].args), []);
+  assert.equal(calls[1].service, 'NativeLogger');
+  assert.equal(calls[1].action, 'pruneLogFile');
+  assert.deepEqual(Array.from(calls[1].args), [172800000]);
+
+  calls[0].success();
+  calls[1].success();
+  await Promise.all([reset, prune]);
+});
+
 test('shared fixtures use the same timestamped line shape', function () {
   const fixtures = require('./fixtures/log-lines.json');
   assert.equal(fixtures.length, 2);

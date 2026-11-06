@@ -80,6 +80,40 @@ class NativeLoggerPlugin: CDVPlugin, MXMetricManagerSubscriber {
         }
     }
 
+    @objc(resetLogFile:)
+    func resetLogFile(_ command: CDVInvokedUrlCommand) {
+        queue.async {
+            guard let logFile = self.logFile else {
+                self.sendError(command.callbackId, code: "NOT_STARTED", message: "Native logger is not started")
+                return
+            }
+            do {
+                try logFile.reset()
+                self.sendSuccess(command.callbackId)
+            } catch {
+                self.sendError(command.callbackId, code: "RESET_FAILED", message: error.localizedDescription)
+            }
+        }
+    }
+
+    @objc(pruneLogFile:)
+    func pruneLogFile(_ command: CDVInvokedUrlCommand) {
+        queue.async {
+            guard let logFile = self.logFile else {
+                self.sendError(command.callbackId, code: "NOT_STARTED", message: "Native logger is not started")
+                return
+            }
+            let maxAgeMs = command.argument(at: 0) as? Double ??
+                (self.options["maxAgeMs"] as? Double ?? NativeLogFile.defaultMaxAgeMs)
+            do {
+                try logFile.prune(maxAgeMs: maxAgeMs)
+                self.sendSuccess(command.callbackId)
+            } catch {
+                self.sendError(command.callbackId, code: "PRUNE_FAILED", message: error.localizedDescription)
+            }
+        }
+    }
+
     @objc(getExitReasons:)
     func getExitReasons(_ command: CDVInvokedUrlCommand) {
         queue.async {

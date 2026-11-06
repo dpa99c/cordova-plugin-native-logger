@@ -175,6 +175,17 @@ public class NativeLoggerPlugin extends CordovaPlugin implements NativeLogcatRea
             if ("flush".equals(action)) {
                 logFile.flush();
                 callback.success();
+            } else if ("resetLogFile".equals(action)) {
+                logFile.reset();
+                callback.success();
+            } else if ("pruneLogFile".equals(action)) {
+                JSONObject activeOptions = options == null ? new JSONObject() : options;
+                long maxAgeMs = args.optLong(
+                    0,
+                    activeOptions.optLong("maxAgeMs", LogFile.DEFAULT_MAX_AGE_MS)
+                );
+                logFile.prune(maxAgeMs);
+                callback.success();
             } else if ("getExitReasons".equals(action)) {
                 recordSystemExitReasons(cordova.getContext(), session);
                 callback.success(session.exitReasons(args.optLong(0, 0L)));

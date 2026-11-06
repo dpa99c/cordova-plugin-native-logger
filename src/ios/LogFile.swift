@@ -54,8 +54,11 @@ final class NativeLogFile {
         if size > 0 && size + UInt64(data.count) > maxFileSizeBytes {
             try rotate()
         }
-        try handle?.seekToEnd()
-        try handle?.write(contentsOf: data)
+        guard let handle = handle else {
+            throw NativeLoggerFailure("Native log writer is not open")
+        }
+        try handle.seekToEnd()
+        try handle.write(contentsOf: data)
     }
 
     func writeSessionMarker(_ message: String) throws {
@@ -85,6 +88,33 @@ final class NativeLogFile {
         try synchronize()
         try handle?.close()
         handle = nil
+    }
+
+    func reset() throws {
+        try close()
+        do {
+            if fileManager.fileExists(atPath: previousURL.path) {
+                try fileManager.removeItem(at: previousURL)
+            }
+            try Data().write(to: currentURL, options: .atomic)
+            try setProtection(for: currentURL)
+            try openWriter()
+        } catch {
+            throw restoreWriter(after: error)
+        }
+    }
+
+    func prune(maxAgeMs: Double) throws {
+        guard maxAgeMs.isFinite, maxAgeMs >= 0 else {
+            throw NativeLoggerFailure("Maximum log message age must be a non-negative duration")
+        }
+        try close()
+        do {
+            try pruneOlderThan(maxAgeMs)
+            try openWriter()
+        } catch {
+            throw restoreWriter(after: error)
+        }
     }
 
     func exportLog() throws -> URL {
@@ -129,8 +159,8 @@ final class NativeLogFile {
     }
 
     private func pruneOlderThan(_ maxAgeMs: Double) throws {
-        guard maxAgeMs > 0 else {
-            return
+        guard maxAgeMs.isFinite, maxAgeMs >= 0 else {
+            throw NativeLoggerFailure("Maximum log message age must be a non-negative duration")
         }
         let cutoff = Date().addingTimeInterval(-maxAgeMs / 1000)
         try prune(file: currentURL, before: cutoff)
@@ -164,6 +194,23 @@ final class NativeLogFile {
         }
         try (retained.joined(separator: "\n")).write(to: file, atomically: true, encoding: .utf8)
         try setProtection(for: file)
+    }
+
+    private func restoreWriter(after operationError: Error) -> Error {
+        do {
+            if !fileManager.fileExists(atPath: currentURL.path) {
+                guard fileManager.createFile(atPath: currentURL.path, contents: nil) else {
+                    throw NativeLoggerFailure("Unable to recreate native log file")
+                }
+            }
+            try setProtection(for: currentURL)
+            try openWriter()
+            return operationError
+        } catch {
+            return NativeLoggerFailure(
+                "\(operationError.localizedDescription); unable to reopen native log: \(error.localizedDescription)"
+            )
+        }
     }
 
     private func rotate() throws {

@@ -37,6 +37,8 @@ Methods:
 | `start(options, onEvent)` | Capabilities for the running capture |
 | `stop()` | Stops capture and closes the log |
 | `flush()` | Persists pending entries |
+| `resetLogFile()` | Clears the current and rotated native text logs |
+| `pruneLogFile(maxAgeMs)` | Removes native log entries older than the supplied age in milliseconds |
 | `getExitReasons(sinceMs)` | Exit records, oldest first |
 | `getDiagnostics()` | Device-state snapshot with explicit unavailable fields |
 | `exportLog()` | File URL of a private combined export |

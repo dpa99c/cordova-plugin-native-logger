@@ -90,6 +90,16 @@ var NativeLogger = {
     return invoke('flush');
   },
 
+  /** Clears the current and rotated native text logs. */
+  resetLogFile: function () {
+    return invoke('resetLogFile');
+  },
+
+  /** Removes native log entries older than the supplied age in milliseconds. */
+  pruneLogFile: function (maxAgeMs) {
+    return invoke('pruneLogFile', [maxAgeMs]);
+  },
+
   /** Returns process-exit records newer than the supplied Unix timestamp. */
   getExitReasons: function (sinceMs) {
     return invoke('getExitReasons', [sinceMs || 0]);
