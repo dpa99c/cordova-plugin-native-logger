@@ -46,6 +46,9 @@ public class NativeLoggerPlugin extends CordovaPlugin implements NativeLogcatRea
     private boolean starting;
     private volatile String appState = "active";
     private JSONObject options;
+    private String fileIncludeAllMinLevel = "F";
+    private JSONArray fileIncludeTags;
+    private JSONArray fileExcludeTags;
     private LogFile logFile;
     private SessionTracker session;
     private NativeLogcatReader reader;
@@ -120,6 +123,9 @@ public class NativeLoggerPlugin extends CordovaPlugin implements NativeLogcatRea
 
             synchronized (stateLock) {
                 options = startOptions;
+                fileIncludeAllMinLevel = includeAllMinimumLevel;
+                fileIncludeTags = startOptions.optJSONArray("includeTags");
+                fileExcludeTags = startOptions.optJSONArray("excludeTags");
                 logFile = openedLog;
                 session = openedSession;
                 eventCallback = callback;
@@ -149,6 +155,9 @@ public class NativeLoggerPlugin extends CordovaPlugin implements NativeLogcatRea
                 logFile = null;
                 session = null;
                 options = null;
+                fileIncludeAllMinLevel = "F";
+                fileIncludeTags = null;
+                fileExcludeTags = null;
             }
             if (openedLog != null) {
                 try {
@@ -255,6 +264,9 @@ public class NativeLoggerPlugin extends CordovaPlugin implements NativeLogcatRea
         logFile = null;
         session = null;
         options = null;
+        fileIncludeAllMinLevel = "F";
+        fileIncludeTags = null;
+        fileExcludeTags = null;
         persistedResumeTimestamp = null;
         latestResumeTimestamp = null;
         recentLines.clear();
@@ -305,9 +317,9 @@ public class NativeLoggerPlugin extends CordovaPlugin implements NativeLogcatRea
         }
         if (!shouldWrite(
             entry,
-            options.optString("includeAllMinLevel", "F"),
-            options.optJSONArray("includeTags"),
-            options.optJSONArray("excludeTags")
+            fileIncludeAllMinLevel,
+            fileIncludeTags,
+            fileExcludeTags
         )) {
             updateResumeTimestamp(entry.timestamp);
             return;

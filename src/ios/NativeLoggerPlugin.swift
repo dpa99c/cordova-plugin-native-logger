@@ -24,6 +24,9 @@ class NativeLoggerPlugin: CDVPlugin, MXMetricManagerSubscriber {
     private var lifecycleObservers: [NSObjectProtocol] = []
     private var callbackId: String?
     private var options: [String: Any] = [:]
+    private var fileIncludeTags: [String] = []
+    private var fileExcludeTags: [String] = []
+    private var fileIncludeAllMinLevel = "F"
     private var appState = "active"
     private var lastDate: Date?
     private var writtenAtLastDate = Set<String>()
@@ -204,6 +207,9 @@ class NativeLoggerPlugin: CDVPlugin, MXMetricManagerSubscriber {
             let openedStore = try OSLogStore(scope: .currentProcessIdentifier)
             try openedLogFile.writeSessionMarker(openedSessionTracker.describeStart())
             self.options = requestedOptions
+            self.fileIncludeTags = Self.stringTags(requestedOptions["includeTags"])
+            self.fileExcludeTags = Self.stringTags(requestedOptions["excludeTags"])
+            self.fileIncludeAllMinLevel = includeAllMinimumLevel
             self.logFile = openedLogFile
             self.session = openedSessionTracker
             self.store = openedStore
@@ -259,6 +265,9 @@ class NativeLoggerPlugin: CDVPlugin, MXMetricManagerSubscriber {
             store = nil
             self.callbackId = nil
             options = [:]
+            fileIncludeTags = []
+            fileExcludeTags = []
+            fileIncludeAllMinLevel = "F"
             lastDate = nil
             writtenAtLastDate.removeAll()
             sendError(callbackId, code: "START_FAILED", message: error.localizedDescription)
@@ -298,6 +307,9 @@ class NativeLoggerPlugin: CDVPlugin, MXMetricManagerSubscriber {
         session = nil
         store = nil
         options = [:]
+        fileIncludeTags = []
+        fileExcludeTags = []
+        fileIncludeAllMinLevel = "F"
         callbackId = nil
         lastDate = nil
         writtenAtLastDate.removeAll()
@@ -384,9 +396,9 @@ class NativeLoggerPlugin: CDVPlugin, MXMetricManagerSubscriber {
                 }
                 guard Self.shouldWrite(
                     line,
-                    includeAllMinimumLevel: options["includeAllMinLevel"] as? String ?? "F",
-                    includeTags: Self.stringTags(options["includeTags"]),
-                    excludeTags: Self.stringTags(options["excludeTags"])
+                    includeAllMinimumLevel: fileIncludeAllMinLevel,
+                    includeTags: fileIncludeTags,
+                    excludeTags: fileExcludeTags
                 ) else {
                     markProcessed(entry)
                     continue
@@ -510,9 +522,9 @@ class NativeLoggerPlugin: CDVPlugin, MXMetricManagerSubscriber {
               NativeLogLine.rank(parsed.level) >= NativeLogLine.rank(options["minLevel"] as? String ?? "D"),
               Self.shouldWrite(
                 parsed,
-                includeAllMinimumLevel: options["includeAllMinLevel"] as? String ?? "F",
-                includeTags: Self.stringTags(options["includeTags"]),
-                excludeTags: Self.stringTags(options["excludeTags"])
+                includeAllMinimumLevel: fileIncludeAllMinLevel,
+                includeTags: fileIncludeTags,
+                excludeTags: fileExcludeTags
               ) else {
             return
         }
