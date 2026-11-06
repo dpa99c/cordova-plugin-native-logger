@@ -2,6 +2,9 @@ export type NativeLogLevel = 'V' | 'D' | 'I' | 'W' | 'E' | 'F';
 
 export interface NativeLoggerOptions {
   minLevel?: NativeLogLevel;
+  includeTags?: string[];
+  excludeTags?: string[];
+  includeAllMinLevel?: NativeLogLevel;
   forward?: {
     minLevel?: NativeLogLevel;
     tags?: string[];

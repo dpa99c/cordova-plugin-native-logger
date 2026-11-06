@@ -179,11 +179,17 @@ class NativeLoggerPlugin: CDVPlugin, MXMetricManagerSubscriber {
         let forward = requestedOptions["forward"] as? [String: Any] ?? [:]
         let minimumLevel = requestedOptions["minLevel"] as? String ?? "D"
         let forwardMinimumLevel = forward["minLevel"] as? String ?? "W"
-        guard NativeLogLine.rank(minimumLevel) >= 0, NativeLogLine.rank(forwardMinimumLevel) >= 0 else {
+        let includeAllLevelOption = requestedOptions["includeAllMinLevel"]
+        let includeAllMinimumLevel = includeAllLevelOption as? String ?? "F"
+        let hasValidIncludeAllMinimumLevel = includeAllLevelOption == nil ||
+            (includeAllLevelOption as? String != nil && NativeLogLine.rank(includeAllMinimumLevel) >= 0)
+        guard NativeLogLine.rank(minimumLevel) >= 0,
+              NativeLogLine.rank(forwardMinimumLevel) >= 0,
+              hasValidIncludeAllMinimumLevel else {
             sendError(
                 callbackId,
                 code: "INVALID_OPTIONS",
-                message: "minLevel and forward.minLevel must be V, D, I, W, E or F"
+                message: "minLevel, forward.minLevel and includeAllMinLevel must be V, D, I, W, E or F"
             )
             return
         }
@@ -376,6 +382,15 @@ class NativeLoggerPlugin: CDVPlugin, MXMetricManagerSubscriber {
                     markProcessed(entry)
                     continue
                 }
+                guard Self.shouldWrite(
+                    line,
+                    includeAllMinimumLevel: options["includeAllMinLevel"] as? String ?? "F",
+                    includeTags: Self.stringTags(options["includeTags"]),
+                    excludeTags: Self.stringTags(options["excludeTags"])
+                ) else {
+                    markProcessed(entry)
+                    continue
+                }
                 try logFile.append(NativeLogLine.format(
                     date: entry.date,
                     pid: line.pid,
@@ -471,16 +486,12 @@ class NativeLoggerPlugin: CDVPlugin, MXMetricManagerSubscriber {
         guard NativeLogLine.rank(entry.level) >= NativeLogLine.rank(minLevel) else {
             return false
         }
-        let excluded = forward["excludeTags"] as? [String] ?? []
-        if excluded.contains(where: {
-            entry.tag == $0 || entry.tag.hasPrefix($0 + "/") || entry.tag.hasPrefix($0 + ":")
-        }) {
+        let excluded = Self.stringTags(forward["excludeTags"])
+        if Self.matchesTag(entry.tag, patterns: excluded) {
             return false
         }
-        let included = forward["tags"] as? [String] ?? []
-        return included.isEmpty || included.contains(where: {
-            entry.tag == $0 || entry.tag.hasPrefix($0 + "/") || entry.tag.hasPrefix($0 + ":")
-        })
+        let included = Self.stringTags(forward["tags"])
+        return included.isEmpty || Self.matchesTag(entry.tag, patterns: included)
     }
 
     private func appendStdio(level: String, message: String) {
@@ -495,14 +506,86 @@ class NativeLoggerPlugin: CDVPlugin, MXMetricManagerSubscriber {
             tag: "stdio",
             message: message
         )
+        guard let parsed = NativeLogLine.parse(line),
+              NativeLogLine.rank(parsed.level) >= NativeLogLine.rank(options["minLevel"] as? String ?? "D"),
+              Self.shouldWrite(
+                parsed,
+                includeAllMinimumLevel: options["includeAllMinLevel"] as? String ?? "F",
+                includeTags: Self.stringTags(options["includeTags"]),
+                excludeTags: Self.stringTags(options["excludeTags"])
+              ) else {
+            return
+        }
         do {
             try logFile.append(line)
-            if let parsed = NativeLogLine.parse(line), shouldForward(parsed) {
+            if shouldForward(parsed) {
                 sendEvent(parsed.dictionary, keepCallback: true)
             }
         } catch {
             sendStatus("write-failed", message: error.localizedDescription)
         }
+    }
+
+    private static func shouldWrite(
+        _ entry: NativeLogLine,
+        includeAllMinimumLevel: String,
+        includeTags: [String],
+        excludeTags: [String]
+    ) -> Bool {
+        if matchesTag(entry.tag, patterns: excludeTags) {
+            return false
+        }
+        if NativeLogLine.rank(entry.level) >= NativeLogLine.rank(includeAllMinimumLevel) {
+            return true
+        }
+        return includeTags.isEmpty || matchesTag(entry.tag, patterns: includeTags)
+    }
+
+    private static func stringTags(_ value: Any?) -> [String] {
+        guard let values = value as? [Any] else {
+            return []
+        }
+        return values.compactMap { $0 as? String }
+    }
+
+    private static func matchesTag(_ tag: String, patterns: [String]) -> Bool {
+        patterns.contains { pattern in
+            if pattern.contains("*") {
+                return matchesWildcard(tag, pattern: pattern)
+            }
+            return tag == pattern || tag.hasPrefix(pattern + "/") || tag.hasPrefix(pattern + ":")
+        }
+    }
+
+    private static func matchesWildcard(_ value: String, pattern: String) -> Bool {
+        let characters = Array(value)
+        let patternCharacters = Array(pattern)
+        var valueIndex = 0
+        var patternIndex = 0
+        var lastWildcardIndex: Int?
+        var valueAfterWildcard: Int?
+
+        while valueIndex < characters.count {
+            if patternIndex < patternCharacters.count && patternCharacters[patternIndex] == "*" {
+                lastWildcardIndex = patternIndex
+                patternIndex += 1
+                valueAfterWildcard = valueIndex
+            } else if patternIndex < patternCharacters.count &&
+                patternCharacters[patternIndex] == characters[valueIndex] {
+                patternIndex += 1
+                valueIndex += 1
+            } else if let wildcardIndex = lastWildcardIndex, let matchedIndex = valueAfterWildcard {
+                patternIndex = wildcardIndex + 1
+                valueIndex = matchedIndex + 1
+                valueAfterWildcard = valueIndex
+            } else {
+                return false
+            }
+        }
+        while patternIndex < patternCharacters.count && patternCharacters[patternIndex] == "*" {
+            patternIndex += 1
+        }
+        return patternIndex == patternCharacters.count
     }
 
     private func saveMetricKitPayload(_ data: Data, reason: String) {

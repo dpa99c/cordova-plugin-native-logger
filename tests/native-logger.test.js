@@ -76,6 +76,22 @@ test('start rejects coded native errors and can be retried', async function () {
   });
 });
 
+test('start forwards native file-filter options unchanged', function () {
+  let args;
+  const options = {
+    includeTags: ['SpeechSynthesis', 'com.apple.coreaudio/as_client'],
+    excludeTags: ['*/NativeTimers', 42],
+    includeAllMinLevel: 'E',
+  };
+  const api = loadModule(function (_onSuccess, _onError, _service, _action, callArgs) {
+    args = callArgs;
+  });
+
+  api.start(options);
+
+  assert.equal(args[0], options);
+});
+
 test('one-shot actions preserve names, arguments, and native errors', async function () {
   const calls = [];
   const api = loadModule(function (success, failure, service, action, args) {

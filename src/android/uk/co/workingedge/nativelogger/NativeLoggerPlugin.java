@@ -91,13 +91,20 @@ public class NativeLoggerPlugin extends CordovaPlugin implements NativeLogcatRea
 
         JSONObject startOptions = requestedOptions == null ? new JSONObject() : requestedOptions;
         String minimumLevel = startOptions.optString("minLevel", "D");
+        String includeAllMinimumLevel = startOptions.optString("includeAllMinLevel", "F");
         JSONObject forward = startOptions.optJSONObject("forward");
         String forwardMinimumLevel = forward == null ? "W" : forward.optString("minLevel", "W");
-        if (LogLine.rank(minimumLevel) < 0 || LogLine.rank(forwardMinimumLevel) < 0) {
+        if (LogLine.rank(minimumLevel) < 0 ||
+            LogLine.rank(forwardMinimumLevel) < 0 ||
+            LogLine.rank(includeAllMinimumLevel) < 0) {
             synchronized (stateLock) {
                 starting = false;
             }
-            sendError(callback, "INVALID_OPTIONS", "minLevel and forward.minLevel must be V, D, I, W, E or F");
+            sendError(
+                callback,
+                "INVALID_OPTIONS",
+                "minLevel, forward.minLevel and includeAllMinLevel must be V, D, I, W, E or F"
+            );
             return;
         }
 
@@ -296,6 +303,15 @@ public class NativeLoggerPlugin extends CordovaPlugin implements NativeLogcatRea
             updateResumeTimestamp(entry.timestamp);
             return;
         }
+        if (!shouldWrite(
+            entry,
+            options.optString("includeAllMinLevel", "F"),
+            options.optJSONArray("includeTags"),
+            options.optJSONArray("excludeTags")
+        )) {
+            updateResumeTimestamp(entry.timestamp);
+            return;
+        }
         if (recentLines.containsKey(line)) {
             updateResumeTimestamp(entry.timestamp);
             return;
@@ -352,17 +368,63 @@ public class NativeLoggerPlugin extends CordovaPlugin implements NativeLogcatRea
         return included == null || included.length() == 0 || matchesTag(entry.tag, included);
     }
 
+    private static boolean shouldWrite(
+        LogLine entry,
+        String includeAllMinimumLevel,
+        JSONArray included,
+        JSONArray excluded
+    ) {
+        if (matchesTag(entry.tag, excluded)) {
+            return false;
+        }
+        if (LogLine.rank(entry.level) >= LogLine.rank(includeAllMinimumLevel)) {
+            return true;
+        }
+        return included == null || included.length() == 0 || matchesTag(entry.tag, included);
+    }
+
     private static boolean matchesTag(String tag, JSONArray tags) {
         if (tags == null) {
             return false;
         }
         for (int index = 0; index < tags.length(); index++) {
-            String filter = tags.optString(index);
-            if (tag.equals(filter) || tag.startsWith(filter + "/") || tag.startsWith(filter + ":")) {
+            Object value = tags.opt(index);
+            if (!(value instanceof String)) {
+                continue;
+            }
+            String filter = (String) value;
+            if (filter.indexOf('*') >= 0 ? matchesWildcard(tag, filter) :
+                tag.equals(filter) || tag.startsWith(filter + "/") || tag.startsWith(filter + ":")) {
                 return true;
             }
         }
         return false;
+    }
+
+    private static boolean matchesWildcard(String value, String pattern) {
+        int valueIndex = 0;
+        int patternIndex = 0;
+        int lastWildcardIndex = -1;
+        int valueAfterWildcard = -1;
+
+        while (valueIndex < value.length()) {
+            if (patternIndex < pattern.length() && pattern.charAt(patternIndex) == '*') {
+                lastWildcardIndex = patternIndex++;
+                valueAfterWildcard = valueIndex;
+            } else if (patternIndex < pattern.length() && pattern.charAt(patternIndex) == value.charAt(valueIndex)) {
+                patternIndex++;
+                valueIndex++;
+            } else if (lastWildcardIndex >= 0) {
+                patternIndex = lastWildcardIndex + 1;
+                valueIndex = ++valueAfterWildcard;
+            } else {
+                return false;
+            }
+        }
+        while (patternIndex < pattern.length() && pattern.charAt(patternIndex) == '*') {
+            patternIndex++;
+        }
+        return patternIndex == pattern.length();
     }
 
     private void sendStatus(String status, String message, boolean keepCallback) {
