@@ -68,6 +68,43 @@ final class LogLine {
         );
     }
 
+    static String truncateLineMessage(String line, int maxMessageLength) {
+        if (maxMessageLength <= 0) {
+            return line;
+        }
+        Matcher matcher = LINE_PATTERN.matcher(line);
+        if (!matcher.matches()) {
+            return line;
+        }
+        String message = matcher.group(6);
+        int messageCodePoints = message.codePointCount(0, message.length());
+        if (messageCodePoints <= maxMessageLength) {
+            return line;
+        }
+        int messageEnd = message.offsetByCodePoints(0, maxMessageLength);
+        return line.substring(0, matcher.start(6)) +
+            message.substring(0, messageEnd) +
+            "… [+" + (messageCodePoints - maxMessageLength) + " chars]";
+    }
+
+    static Integer maxMessageLength(Object value) {
+        if (value == null) {
+            return 0;
+        }
+        if (!(value instanceof Number)) {
+            return null;
+        }
+        double numericValue = ((Number) value).doubleValue();
+        if (Double.isNaN(numericValue) ||
+            Double.isInfinite(numericValue) ||
+            numericValue < 0 ||
+            numericValue > Integer.MAX_VALUE ||
+            numericValue != Math.floor(numericValue)) {
+            return null;
+        }
+        return (int) numericValue;
+    }
+
     static Date parseTimestamp(String timestamp) {
         SimpleDateFormat formatter = new SimpleDateFormat(DATE_PATTERN, Locale.US);
         formatter.setLenient(false);

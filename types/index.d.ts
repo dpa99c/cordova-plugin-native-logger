@@ -12,6 +12,8 @@ export interface NativeLoggerOptions {
   };
   maxAgeMs?: number;
   maxFileSizeBytes?: number;
+  /** Maximum message characters written to native files; 0 or omitted means unlimited. Forwarded events stay full length. */
+  maxMessageLength?: number;
   ios?: {
     pollIntervalMs?: number;
     captureStdio?: boolean;

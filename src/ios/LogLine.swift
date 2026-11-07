@@ -1,3 +1,4 @@
+import CoreFoundation
 import Foundation
 
 struct NativeLogLine {
@@ -74,6 +75,33 @@ struct NativeLogLine {
             tag,
             cleanMessage
         )
+    }
+
+    static func truncatedLine(_ line: String, maxMessageLength: Int) -> String {
+        guard maxMessageLength > 0,
+              let parsed = parse(line),
+              parsed.message.count > maxMessageLength,
+              let messageRange = line.range(of: parsed.message, options: .backwards) else {
+            return line
+        }
+        let removedCharacters = parsed.message.count - maxMessageLength
+        return String(line[..<messageRange.lowerBound]) +
+            String(parsed.message.prefix(maxMessageLength)) +
+            "… [+\(removedCharacters) chars]"
+    }
+
+    static func maxMessageLength(_ value: Any?) -> Int? {
+        guard let value = value else {
+            return 0
+        }
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID(),
+              number.doubleValue.isFinite,
+              let integer = Int(exactly: number.doubleValue),
+              integer >= 0 else {
+            return nil
+        }
+        return integer
     }
 
     static func date(from timestamp: String) -> Date? {

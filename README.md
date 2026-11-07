@@ -13,6 +13,7 @@ document.addEventListener('deviceready', function () {
     minLevel: 'D',
     maxAgeMs: 2 * 24 * 60 * 60 * 1000,
     maxFileSizeBytes: 5 * 1024 * 1024,
+    maxMessageLength: 500,
     includeTags: ['LocalNotification', 'SpeechSynthesis', 'AndroidRuntime'],
     excludeTags: ['NativeTimers', 'TSLocationManager', 'chromium'],
     includeAllMinLevel: 'E',
@@ -52,6 +53,8 @@ Methods:
 The top-level `includeTags`, `excludeTags`, and `includeAllMinLevel` options filter entries written to the native files. `excludeTags` always takes precedence; entries at or above `includeAllMinLevel` are otherwise included even when their tag is not in `includeTags`. The threshold defaults to `F`, and an absent or empty `includeTags` list allows all tags. Non-string tag entries are ignored. Patterns containing `*` match the whole tag as a glob; patterns without `*` match the exact tag or a tag followed by `/` or `:`.
 
 The `forward.*` options only filter entries forwarded to the JavaScript callback and app log. They do not control file contents; forwarded entries are always a subset of entries written to the native file.
+
+`maxMessageLength` limits the message portion of entries written to native files. It must be a non-negative integer; `0` or omission disables truncation. Longer messages are shortened to the configured character count and suffixed with `… [+n chars]`. Forwarded entries are not truncated, so the app log retains the full detail.
 
 ## Platform behaviour and limits
 

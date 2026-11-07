@@ -27,6 +27,7 @@ class NativeLoggerPlugin: CDVPlugin, MXMetricManagerSubscriber {
     private var fileIncludeTags: [String] = []
     private var fileExcludeTags: [String] = []
     private var fileIncludeAllMinLevel = "F"
+    private var fileMaxMessageLength = 0
     private var appState = "active"
     private var lastDate: Date?
     private var writtenAtLastDate = Set<String>()
@@ -186,13 +187,16 @@ class NativeLoggerPlugin: CDVPlugin, MXMetricManagerSubscriber {
         let includeAllMinimumLevel = includeAllLevelOption as? String ?? "F"
         let hasValidIncludeAllMinimumLevel = includeAllLevelOption == nil ||
             (includeAllLevelOption as? String != nil && NativeLogLine.rank(includeAllMinimumLevel) >= 0)
+        let maxMessageLength = NativeLogLine.maxMessageLength(requestedOptions["maxMessageLength"])
         guard NativeLogLine.rank(minimumLevel) >= 0,
               NativeLogLine.rank(forwardMinimumLevel) >= 0,
-              hasValidIncludeAllMinimumLevel else {
+              hasValidIncludeAllMinimumLevel,
+              let maxMessageLength = maxMessageLength else {
             sendError(
                 callbackId,
                 code: "INVALID_OPTIONS",
-                message: "minLevel, forward.minLevel and includeAllMinLevel must be V, D, I, W, E or F"
+                message: "minLevel, forward.minLevel and includeAllMinLevel must be V, D, I, W, E or F; " +
+                    "maxMessageLength must be a non-negative integer"
             )
             return
         }
@@ -210,6 +214,7 @@ class NativeLoggerPlugin: CDVPlugin, MXMetricManagerSubscriber {
             self.fileIncludeTags = Self.stringTags(requestedOptions["includeTags"])
             self.fileExcludeTags = Self.stringTags(requestedOptions["excludeTags"])
             self.fileIncludeAllMinLevel = includeAllMinimumLevel
+            self.fileMaxMessageLength = maxMessageLength
             self.logFile = openedLogFile
             self.session = openedSessionTracker
             self.store = openedStore
@@ -268,6 +273,7 @@ class NativeLoggerPlugin: CDVPlugin, MXMetricManagerSubscriber {
             fileIncludeTags = []
             fileExcludeTags = []
             fileIncludeAllMinLevel = "F"
+            fileMaxMessageLength = 0
             lastDate = nil
             writtenAtLastDate.removeAll()
             sendError(callbackId, code: "START_FAILED", message: error.localizedDescription)
@@ -310,6 +316,7 @@ class NativeLoggerPlugin: CDVPlugin, MXMetricManagerSubscriber {
         fileIncludeTags = []
         fileExcludeTags = []
         fileIncludeAllMinLevel = "F"
+        fileMaxMessageLength = 0
         callbackId = nil
         lastDate = nil
         writtenAtLastDate.removeAll()
@@ -403,14 +410,14 @@ class NativeLoggerPlugin: CDVPlugin, MXMetricManagerSubscriber {
                     markProcessed(entry)
                     continue
                 }
-                try logFile.append(NativeLogLine.format(
+                try logFile.append(NativeLogLine.truncatedLine(NativeLogLine.format(
                     date: entry.date,
                     pid: line.pid,
                     tid: line.tid,
                     level: line.level,
                     tag: line.tag,
                     message: line.message
-                ))
+                ), maxMessageLength: fileMaxMessageLength))
                 markProcessed(entry)
                 if shouldForward(line) {
                     sendEvent(line.dictionary, keepCallback: true)
@@ -529,7 +536,7 @@ class NativeLoggerPlugin: CDVPlugin, MXMetricManagerSubscriber {
             return
         }
         do {
-            try logFile.append(line)
+            try logFile.append(NativeLogLine.truncatedLine(line, maxMessageLength: fileMaxMessageLength))
             if shouldForward(parsed) {
                 sendEvent(parsed.dictionary, keepCallback: true)
             }

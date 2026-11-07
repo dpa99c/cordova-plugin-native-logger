@@ -47,6 +47,7 @@ public class NativeLoggerPlugin extends CordovaPlugin implements NativeLogcatRea
     private volatile String appState = "active";
     private JSONObject options;
     private String fileIncludeAllMinLevel = "F";
+    private int fileMaxMessageLength;
     private JSONArray fileIncludeTags;
     private JSONArray fileExcludeTags;
     private LogFile logFile;
@@ -97,16 +98,19 @@ public class NativeLoggerPlugin extends CordovaPlugin implements NativeLogcatRea
         String includeAllMinimumLevel = startOptions.optString("includeAllMinLevel", "F");
         JSONObject forward = startOptions.optJSONObject("forward");
         String forwardMinimumLevel = forward == null ? "W" : forward.optString("minLevel", "W");
+        Integer maxMessageLength = LogLine.maxMessageLength(startOptions.opt("maxMessageLength"));
         if (LogLine.rank(minimumLevel) < 0 ||
             LogLine.rank(forwardMinimumLevel) < 0 ||
-            LogLine.rank(includeAllMinimumLevel) < 0) {
+            LogLine.rank(includeAllMinimumLevel) < 0 ||
+            maxMessageLength == null) {
             synchronized (stateLock) {
                 starting = false;
             }
             sendError(
                 callback,
                 "INVALID_OPTIONS",
-                "minLevel, forward.minLevel and includeAllMinLevel must be V, D, I, W, E or F"
+                "minLevel, forward.minLevel and includeAllMinLevel must be V, D, I, W, E or F; " +
+                    "maxMessageLength must be a non-negative integer"
             );
             return;
         }
@@ -124,6 +128,7 @@ public class NativeLoggerPlugin extends CordovaPlugin implements NativeLogcatRea
             synchronized (stateLock) {
                 options = startOptions;
                 fileIncludeAllMinLevel = includeAllMinimumLevel;
+                fileMaxMessageLength = maxMessageLength;
                 fileIncludeTags = startOptions.optJSONArray("includeTags");
                 fileExcludeTags = startOptions.optJSONArray("excludeTags");
                 logFile = openedLog;
@@ -156,6 +161,7 @@ public class NativeLoggerPlugin extends CordovaPlugin implements NativeLogcatRea
                 session = null;
                 options = null;
                 fileIncludeAllMinLevel = "F";
+                fileMaxMessageLength = 0;
                 fileIncludeTags = null;
                 fileExcludeTags = null;
             }
@@ -329,7 +335,7 @@ public class NativeLoggerPlugin extends CordovaPlugin implements NativeLogcatRea
             return;
         }
         try {
-            logFile.append(line);
+            logFile.append(LogLine.truncateLineMessage(line, fileMaxMessageLength));
             recentLines.put(line, Boolean.TRUE);
             if (recentLines.size() > MAX_RECENT_LINES) {
                 recentLines.remove(recentLines.keySet().iterator().next());

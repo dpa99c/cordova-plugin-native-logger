@@ -82,6 +82,7 @@ test('start forwards native file-filter options unchanged', function () {
     includeTags: ['SpeechSynthesis', 'com.apple.coreaudio/as_client'],
     excludeTags: ['*/NativeTimers', 42],
     includeAllMinLevel: 'E',
+    maxMessageLength: 500,
   };
   const api = loadModule(function (_onSuccess, _onError, _service, _action, callArgs) {
     args = callArgs;
