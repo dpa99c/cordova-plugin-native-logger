@@ -24,11 +24,13 @@ final class SessionTracker {
     private final File exitsFile;
     private final Context context;
     private final JSONObject currentSession;
+    private final boolean activityRecreated;
     private long lastHeartbeatMs;
 
-    private SessionTracker(Context context, JSONObject currentSession) {
+    private SessionTracker(Context context, JSONObject currentSession, boolean activityRecreated) {
         this.context = context;
         this.currentSession = currentSession;
+        this.activityRecreated = activityRecreated;
         File directory = new File(context.getFilesDir(), "native-logger");
         sessionFile = new File(directory, "session.json");
         exitsFile = new File(directory, "exit-reasons.json");
@@ -43,22 +45,34 @@ final class SessionTracker {
         JSONObject previous = readJson(sessionFile);
         long now = System.currentTimeMillis();
         long bootTime = now - SystemClock.elapsedRealtime();
-        SessionTracker tracker = new SessionTracker(context, new JSONObject());
-        if (previous != null) {
+        int currentPid = android.os.Process.myPid();
+        boolean activityRecreated = previous != null && previous.optInt("pid", -1) == currentPid;
+        JSONObject currentSession = activityRecreated ? previous : new JSONObject();
+        SessionTracker tracker = new SessionTracker(context, currentSession, activityRecreated);
+        if (previous != null && !activityRecreated) {
             tracker.recordPreviousSession(previous, bootTime, now);
         }
 
+        if (!activityRecreated) {
+            tracker.currentSession
+                .put("pid", currentPid)
+                .put("startedAtMs", now)
+                .put("bootTimeMs", bootTime);
+        }
+        if (!activityRecreated || !tracker.currentSession.has("debuggerAttached")) {
+            tracker.currentSession.put("debuggerAttached", Debug.isDebuggerConnected());
+        }
         tracker.currentSession
-            .put("pid", android.os.Process.myPid())
-            .put("startedAtMs", now)
-            .put("bootTimeMs", bootTime)
             .put("lastHeartbeatMs", now)
             .put("appState", "active")
-            .put("debuggerAttached", Debug.isDebuggerConnected())
             .put("cleanExit", false);
         tracker.lastHeartbeatMs = now;
         tracker.writeSession();
         return tracker;
+    }
+
+    boolean wasActivityRecreated() {
+        return activityRecreated;
     }
 
     synchronized void heartbeat(boolean foreground) throws IOException, JSONException {
@@ -80,12 +94,17 @@ final class SessionTracker {
         writeSession();
     }
 
-    synchronized String describePreviousSession() throws JSONException {
+    synchronized String describeStart() throws JSONException {
         return "session start; app " + appVersion() + "; os Android " + Build.VERSION.RELEASE +
             "; pid " + android.os.Process.myPid() + "; booted " +
             currentSession.optLong("bootTimeMs") + "; previous session pid " +
             currentSession.optInt("previousPid", -1) + "; debugger attached " +
             currentSession.optBoolean("debuggerAttached");
+    }
+
+    synchronized String describeActivityRecreation() {
+        return "session resumed (activity re-created); pid " +
+            currentSession.optInt("pid", android.os.Process.myPid());
     }
 
     synchronized void recordExit(JSONObject record) throws IOException, JSONException {

@@ -1,5 +1,6 @@
 package uk.co.workingedge.nativelogger;
 
+import android.util.Log;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -7,21 +8,31 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 
 final class NativeLogcatReader implements Runnable {
+    private static final String LOG_TAG = "NativeLogger";
+    private static final String BACKLOG_MARKER_PREFIX = "native logger backlog flushed; id=";
+
     interface Listener {
         String resumeTimestamp();
         void onLine(String line);
+        void onBacklogFlushed(String timestamp);
         void onStatus(String status, String message);
     }
 
     private final Listener listener;
+    private final boolean markBacklogFlush;
+    private final String backlogMarker;
     private volatile boolean stopped;
     private volatile Process process;
     private Thread thread;
+    private boolean backlogFlushed;
 
-    NativeLogcatReader(Listener listener) {
+    NativeLogcatReader(Listener listener, boolean markBacklogFlush) {
         this.listener = listener;
+        this.markBacklogFlush = markBacklogFlush;
+        backlogMarker = BACKLOG_MARKER_PREFIX + UUID.randomUUID();
     }
 
     synchronized void start() {
@@ -75,6 +86,9 @@ final class NativeLogcatReader implements Runnable {
                     active.destroy();
                     return;
                 }
+                if (markBacklogFlush && !backlogFlushed) {
+                    Log.i(LOG_TAG, backlogMarker);
+                }
                 try (
                     BufferedReader reader = new BufferedReader(
                         new InputStreamReader(active.getInputStream(), StandardCharsets.UTF_8)
@@ -82,6 +96,19 @@ final class NativeLogcatReader implements Runnable {
                 ) {
                     String line;
                     while (!stopped && (line = reader.readLine()) != null) {
+                        LogLine entry = LogLine.parse(line);
+                        if (
+                            entry != null &&
+                            LOG_TAG.equals(entry.tag) &&
+                            entry.message.startsWith(BACKLOG_MARKER_PREFIX)
+                        ) {
+                            if (markBacklogFlush && !backlogFlushed &&
+                                backlogMarker.equals(entry.message)) {
+                                backlogFlushed = true;
+                                listener.onBacklogFlushed(entry.timestamp);
+                            }
+                            continue;
+                        }
                         listener.onLine(line);
                     }
                 }

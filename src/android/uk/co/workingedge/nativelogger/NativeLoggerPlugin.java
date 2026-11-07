@@ -54,6 +54,7 @@ public class NativeLoggerPlugin extends CordovaPlugin implements NativeLogcatRea
     private SessionTracker session;
     private NativeLogcatReader reader;
     private CallbackContext eventCallback;
+    private String pendingSessionMarker;
     private String persistedResumeTimestamp;
     private volatile String latestResumeTimestamp;
     private final LinkedHashMap<String, Boolean> recentLines = new LinkedHashMap<>();
@@ -122,8 +123,16 @@ public class NativeLoggerPlugin extends CordovaPlugin implements NativeLogcatRea
             openedLog = LogFile.open(context, startOptions);
             String resumeTimestamp = openedLog.lastTimestamp();
             openedSession = SessionTracker.begin(context);
-            openedLog.writeSessionMarker(openedSession.describePreviousSession());
-            NativeLogcatReader openedReader = new NativeLogcatReader(this);
+            String sessionMarker = openedSession.wasActivityRecreated()
+                ? openedSession.describeActivityRecreation()
+                : null;
+            if (sessionMarker == null) {
+                openedLog.writeSessionMarker(openedSession.describeStart());
+            }
+            NativeLogcatReader openedReader = new NativeLogcatReader(
+                this,
+                sessionMarker != null
+            );
 
             synchronized (stateLock) {
                 options = startOptions;
@@ -134,6 +143,7 @@ public class NativeLoggerPlugin extends CordovaPlugin implements NativeLogcatRea
                 logFile = openedLog;
                 session = openedSession;
                 eventCallback = callback;
+                pendingSessionMarker = sessionMarker;
                 reader = openedReader;
                 persistedResumeTimestamp = resumeTimestamp;
                 latestResumeTimestamp = resumeTimestamp;
@@ -157,6 +167,7 @@ public class NativeLoggerPlugin extends CordovaPlugin implements NativeLogcatRea
                 starting = false;
                 running = false;
                 eventCallback = null;
+                pendingSessionMarker = null;
                 logFile = null;
                 session = null;
                 options = null;
@@ -230,6 +241,7 @@ public class NativeLoggerPlugin extends CordovaPlugin implements NativeLogcatRea
                 return;
             }
             running = false;
+            pendingSessionMarker = null;
         }
 
         mainHandler.removeCallbacks(heartbeat);
@@ -302,6 +314,33 @@ public class NativeLoggerPlugin extends CordovaPlugin implements NativeLogcatRea
     @Override
     public String resumeTimestamp() {
         return latestResumeTimestamp;
+    }
+
+    @Override
+    public void onBacklogFlushed(String timestamp) {
+        updateResumeTimestamp(timestamp);
+        String marker;
+        LogFile activeLog;
+        synchronized (stateLock) {
+            if (!running || pendingSessionMarker == null) {
+                return;
+            }
+            marker = pendingSessionMarker;
+            pendingSessionMarker = null;
+            activeLog = logFile;
+        }
+        if (activeLog == null) {
+            IOException exception = new IOException("Native log is unavailable after backlog flush");
+            Log.e(TAG, "Failed to write activity recreation marker", exception);
+            sendStatus("write-failed", exception.getMessage(), true);
+            return;
+        }
+        try {
+            activeLog.writeSessionMarker(marker);
+        } catch (IOException exception) {
+            Log.e(TAG, "Failed to write activity recreation marker", exception);
+            sendStatus("write-failed", exception.getMessage(), true);
+        }
     }
 
     @Override
@@ -589,6 +628,7 @@ public class NativeLoggerPlugin extends CordovaPlugin implements NativeLogcatRea
 
     private void stopAndClose(boolean closeSession) {
         running = false;
+        pendingSessionMarker = null;
         NativeLogcatReader activeReader = reader;
         reader = null;
         if (activeReader != null) {
