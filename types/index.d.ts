@@ -54,6 +54,8 @@ export interface NativeExitReason {
   description: string;
   source: 'system' | 'inferred' | 'metrickit';
   details: Record<string, unknown>;
+  /** Whether a debugger was attached to the exited process; null when detection was unavailable. */
+  debuggerAttached?: boolean | null;
 }
 
 export interface NativeLoggerError extends Error {

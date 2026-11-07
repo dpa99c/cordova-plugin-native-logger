@@ -56,6 +56,8 @@ The `forward.*` options only filter entries forwarded to the JavaScript callback
 
 `maxMessageLength` limits the message portion of entries written to native files. It must be a non-negative integer; `0` or omission disables truncation. Longer messages are shortened to the configured character count and suffixed with `… [+n chars]`. Forwarded entries are not truncated, so the app log retains the full detail.
 
+Inferred `getExitReasons()` records include `debuggerAttached` when the exited session recorded whether a debugger was connected. It is `null` when the platform could not determine the state and may be absent on records created by older plugin versions.
+
 ## Platform behaviour and limits
 
 - Android streams the app's accessible logcat entries to private app files. It can recover previous-process lines still retained by the shared log buffer and uses system exit records on Android 11+. Recovery is best-effort because the buffer may wrap. The plugin never clears it. An allowlist, level threshold and exclude list can limit file content.

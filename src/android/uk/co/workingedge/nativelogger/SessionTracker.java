@@ -2,6 +2,7 @@ package uk.co.workingedge.nativelogger;
 
 import android.content.Context;
 import android.os.Build;
+import android.os.Debug;
 import android.os.SystemClock;
 import java.io.File;
 import java.io.FileInputStream;
@@ -53,6 +54,7 @@ final class SessionTracker {
             .put("bootTimeMs", bootTime)
             .put("lastHeartbeatMs", now)
             .put("appState", "active")
+            .put("debuggerAttached", Debug.isDebuggerConnected())
             .put("cleanExit", false);
         tracker.lastHeartbeatMs = now;
         tracker.writeSession();
@@ -82,7 +84,8 @@ final class SessionTracker {
         return "session start; app " + appVersion() + "; os Android " + Build.VERSION.RELEASE +
             "; pid " + android.os.Process.myPid() + "; booted " +
             currentSession.optLong("bootTimeMs") + "; previous session pid " +
-            currentSession.optInt("previousPid", -1);
+            currentSession.optInt("previousPid", -1) + "; debugger attached " +
+            currentSession.optBoolean("debuggerAttached");
     }
 
     synchronized void recordExit(JSONObject record) throws IOException, JSONException {
@@ -142,6 +145,9 @@ final class SessionTracker {
             .put("reason", reason)
             .put("description", "Previous session did not record a clean exit")
             .put("source", "inferred")
+            .put("debuggerAttached", previous.has("debuggerAttached")
+                ? previous.get("debuggerAttached")
+                : JSONObject.NULL)
             .put("details", details));
         currentSession.put("previousPid", previous.optInt("pid", -1));
     }

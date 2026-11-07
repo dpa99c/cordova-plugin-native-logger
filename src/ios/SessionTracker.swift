@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 final class NativeSessionTracker {
@@ -29,6 +30,7 @@ final class NativeSessionTracker {
                     "reason": reason,
                     "description": "Previous session did not record a clean exit",
                     "source": "inferred",
+                    "debuggerAttached": previous["debuggerAttached"] ?? NSNull(),
                     "details": [
                         "lastHeartbeatMs": lastHeartbeat * 1000,
                         "lastAppState": appState,
@@ -46,6 +48,7 @@ final class NativeSessionTracker {
             "bootTime": bootTime.timeIntervalSince1970,
             "lastHeartbeat": now.timeIntervalSince1970,
             "appState": "active",
+            "debuggerAttached": Self.debuggerAttached().map { $0 as Any } ?? NSNull(),
             "cleanExit": false,
             "previousPid": previous?["pid"] ?? NSNull(),
         ]
@@ -75,8 +78,10 @@ final class NativeSessionTracker {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown"
         let previousPid = session["previousPid"] ?? NSNull()
+        let debuggerAttached = (session["debuggerAttached"] as? Bool).map { String($0) } ?? "unknown"
         return "session start; app \(version) (\(build)); os iOS \(ProcessInfo.processInfo.operatingSystemVersionString); " +
-            "pid \(ProcessInfo.processInfo.processIdentifier); booted \(session["bootTime"] ?? 0); previous session pid \(previousPid)"
+            "pid \(ProcessInfo.processInfo.processIdentifier); booted \(session["bootTime"] ?? 0); previous session pid \(previousPid); " +
+            "debugger attached \(debuggerAttached)"
     }
 
     func recordExit(_ record: [String: Any]) throws {
@@ -93,6 +98,16 @@ final class NativeSessionTracker {
     private func writeSession() throws {
         let data = try JSONSerialization.data(withJSONObject: session, options: [.sortedKeys])
         try data.write(to: sessionURL, options: .atomic)
+    }
+
+    private static func debuggerAttached() -> Bool? {
+        var processInfo = kinfo_proc()
+        var processIdentifiers = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()]
+        var size = MemoryLayout<kinfo_proc>.stride
+        guard sysctl(&processIdentifiers, u_int(processIdentifiers.count), &processInfo, &size, nil, 0) == 0 else {
+            return nil
+        }
+        return (processInfo.kp_proc.p_flag & P_TRACED) != 0
     }
 
     private static func readDictionary(from url: URL) throws -> [String: Any]? {
